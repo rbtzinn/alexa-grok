@@ -1,0 +1,41 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "meu grok",
+      "intents": [
+        {
+          "name": "ChatIntent",
+          "slots": [
+            { "name": "query", "type": "AMAZON.SearchQuery" }
+          ],
+          "samples": [
+            "pergunta {query}",
+            "pergunte {query}",
+            "me diz {query}",
+            "me diga {query}",
+            "me explica {query}",
+            "me explique {query}",
+            "me conta {query}",
+            "quero saber {query}",
+            "eu quero saber {query}",
+            "responde {query}",
+            "o que é {query}",
+            "quem é {query}",
+            "como {query}",
+            "por que {query}",
+            "qual {query}",
+            "quanto {query}",
+            "onde {query}",
+            "quando {query}"
+          ]
+        },
+        { "name": "AMAZON.HelpIntent", "samples": [] },
+        { "name": "AMAZON.StopIntent", "samples": [] },
+        { "name": "AMAZON.CancelIntent", "samples": [] },
+        { "name": "AMAZON.NavigateHomeIntent", "samples": [] },
+        { "name": "AMAZON.FallbackIntent", "samples": [] }
+      ],
+      "types": []
+    }
+  }
+}
