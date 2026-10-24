@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "assistente esperto",
+      "invocationName": "sabe tudo",
       "intents": [
         {
           "name": "ChatIntent",
