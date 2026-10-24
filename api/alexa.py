@@ -238,6 +238,26 @@ def speak(text: str, end: bool = False, session_attrs: dict | None = None, repro
     return resp
 
 
+_WAKE_WORDS = ("alexa", "alécsa", "aléxa", "aleksa", "alexia", "ei alexa", "oi alexa", "ô alexa", "ok alexa")
+_ENTRY_WORDS = ("me diz", "me diga", "me explica", "me explique", "me conta", "pergunta", "pergunte", "responde")
+
+
+def strip_wake_word(text: str) -> str:
+    """Remove "Alexa" (e variações) do começo da frase, caso tenha entrado no texto.
+    Se sobrar só a palavra de entrada, ex.: "alexa me diz", retorna vazio."""
+    t = text.strip()
+    low = t.lower()
+    for w in sorted(_WAKE_WORDS, key=len, reverse=True):
+        if low == w:
+            return ""
+        if low.startswith(w + " ") or low.startswith(w + ","):
+            t = t[len(w):].lstrip(" ,.!")
+            break
+    if t.lower() in _ENTRY_WORDS:
+        return ""
+    return t
+
+
 def handle_alexa_request(body: dict) -> dict:
     request = body.get("request", {})
     req_type = request.get("type")
@@ -279,6 +299,7 @@ def handle_alexa_request(body: dict) -> dict:
             if value:
                 user_text = value
                 break
+        user_text = strip_wake_word(user_text)
         if not user_text:
             return speak("Não entendi. Pode repetir?", session_attrs=attrs, reprompt="Pode repetir?")
 
