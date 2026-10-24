@@ -1,5 +1,5 @@
 """Teste local sem Echo e sem Amazon: python test_local.py "sua pergunta"
-Usa ALEXA_SKIP_VERIFY=1 automaticamente. Precisa de XAI_API_KEY para respostas reais."""
+Usa ALEXA_SKIP_VERIFY=1 automaticamente. Precisa de AI_API_KEY para respostas reais."""
 import json
 import os
 import sys

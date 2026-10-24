@@ -1,65 +1,63 @@
-# Alexa + Grok (Skill personalizada)
+# Alexa + IA (Skill personalizada)
 
-Faz o seu Echo responder usando o Grok. A Alexa vira só o microfone e o alto-falante: você fala *"Alexa, abrir meu grok"*, e tudo o que disser depois vai para o seu servidor na Vercel, que pergunta ao Grok e devolve a resposta para a Alexa falar. A conversa guarda as últimas 6 trocas, então dá para fazer perguntas de continuação ("e quantos habitantes ela tem?").
+Faz o seu Echo responder usando uma IA. A Alexa vira só o microfone e o alto-falante: você fala *"Alexa, abrir meu grok"* e tudo o que disser depois vai para o seu servidor na Vercel, que pergunta à IA e devolve a resposta para a Alexa falar. A skill guarda as últimas 6 trocas, então dá para fazer perguntas de continuação.
 
-```
-Echo -> Amazon (transcreve a fala) -> POST /api/alexa (Vercel) -> API do Grok
-     <- Amazon (fala a resposta)  <- JSON da resposta        <-
-```
-
-## Estrutura
+O padrão é o **Groq**, que é gratuito, não pede cartão e é muito rápido (a Alexa só espera cerca de 8 segundos). Qualquer API no formato da OpenAI funciona, e a troca de IA é feita só nas variáveis de ambiente.
 
 ```
-api/alexa.py                                   endpoint (Python, serverless Vercel)
-requirements.txt                               dependência (cryptography, para checar a assinatura da Amazon)
-skill-package/interactionModels/custom/pt-BR.json   modelo de voz da skill (cole no console da Alexa)
-test_local.py                                  teste sem Echo
+Echo -> Amazon (transcreve) -> POST /api/alexa (Vercel) -> API da IA
+     <- Amazon (fala)       <- JSON da resposta        <-
 ```
+
+## Arquivos
+
+```
+api/alexa.py                                        endpoint (Python, serverless Vercel)
+vercel.json                                         faz a Vercel tratar /api como funções (evita PYTHON_ENTRYPOINT_NOT_FOUND)
+requirements.txt                                    cryptography (verificação da assinatura da Amazon)
+skill-package/interactionModels/custom/pt-BR.json   modelo de voz (colar no console da Alexa)
+test_local.py                                       teste sem Echo
+```
+
+## Variáveis de ambiente (Vercel → Settings → Environment Variables)
+
+| Variável | Obrigatória | Valor |
+|---|---|---|
+| `AI_API_KEY` | sim | chave do provedor (Groq: console.groq.com → API Keys) |
+| `AI_MODEL` | não | padrão `llama-3.3-70b-versatile`. Se o Groq recusar, use um nome da lista de modelos do console |
+| `AI_BASE_URL` | não | padrão `https://api.groq.com/openai/v1` |
+| `ALEXA_SKILL_ID` | recomendada | ID da skill (`amzn1.ask.skill...`) |
+| `AI_SYSTEM_PROMPT` | não | personalidade do assistente |
+
+Para usar outros provedores, troque `AI_BASE_URL`, `AI_MODEL` e `AI_API_KEY`:
+- **OpenRouter** (tem modelos grátis): `https://openrouter.ai/api/v1`, com o modelo `openrouter/free`
+- **xAI/Grok** (pago): `https://api.x.ai/v1`, com o modelo `grok-4-fast`
+
+Depois de mudar qualquer variável, faça **Redeploy**.
 
 ## Passo a passo
 
-### 1. Chave do Grok
-Crie uma chave em https://console.x.ai e guarde-a.
+1. **Chave:** em console.groq.com, faça login e vá em API Keys → Create API Key.
+2. **Vercel:** importe o repositório, configure `AI_API_KEY` e faça o deploy. Para conferir, abra `https://SEU-PROJETO.vercel.app/api/alexa`: deve aparecer `"status": "ok"` e `"chave_configurada": true`.
+3. **Skill:** em developer.amazon.com/alexa/console/ask, use a mesma conta do Echo, idioma Portuguese (BR), modelo Custom e "Provision your own".
+4. **Modelo de voz:** em Build → Interaction Model → JSON Editor, cole o `pt-BR.json` e depois clique em Save e em Build Skill.
+5. **Endpoint:** em Build → Endpoint, escolha HTTPS, cole a URL `/api/alexa` e, no certificado, escolha a opção de "wildcard certificate". Depois copie o Skill ID para `ALEXA_SKILL_ID` e faça Redeploy.
+6. **Teste:** na aba Test, escolha Development e digite `abrir meu grok` e depois `pergunta qual a capital de Pernambuco`. Em seguida, teste no Echo.
 
-### 2. Deploy na Vercel
-1. Suba esta pasta para um repositório no GitHub e importe-o na Vercel (ou rode `vercel` na pasta).
-2. Em **Settings → Environment Variables**, crie:
-   | Variável | Valor |
-   |---|---|
-   | `XAI_API_KEY` | sua chave da xAI |
-   | `XAI_MODEL` | opcional; o padrão é `grok-4-fast`. Troque pelo nome que aparecer no console da xAI |
-   | `ALEXA_SKILL_ID` | opcional, mas recomendado: o ID da skill (passo 3) |
-   | `GROK_SYSTEM_PROMPT` | opcional: a personalidade do assistente |
-3. Abra `https://SEU-PROJETO.vercel.app/api/alexa` no navegador. Deve aparecer `{"status": "ok", ...}`.
+## Como falar
 
-### 3. Criar a skill
-1. Acesse https://developer.amazon.com/alexa/console/ask e entre com **a mesma conta Amazon do seu Echo**.
-2. Clique em **Create Skill**, dê um nome, escolha o idioma **Portuguese (BR)**, o modelo **Custom** e o backend **Provision your own**.
-3. Em **Build → Interaction Model → JSON Editor**, cole o conteúdo de `pt-BR.json`, clique em **Save** e depois em **Build Skill**.
-4. Em **Build → Endpoint**, escolha **HTTPS**, cole a URL `https://SEU-PROJETO.vercel.app/api/alexa` e, no certificado, escolha *"My development endpoint is a sub-domain of a domain that has a wildcard certificate from a certificate authority"*.
-5. Copie o **Skill ID** e coloque-o em `ALEXA_SKILL_ID` na Vercel. Depois faça redeploy.
+Comece a pergunta com **pergunta**, **me diz**, **me explica**, **o que é**, **quem é**, **como**, **por que**... Essa "palavra de entrada" é exigida pela Amazon para perguntas livres.
 
-### 4. Testar
-- No console, aba **Test**, ative **Development** e digite: `abrir meu grok` e depois `pergunta qual a capital de Pernambuco`.
-- No Echo, a skill de desenvolvimento já aparece na sua conta: *"Alexa, abrir meu grok"*.
-- Localmente, sem Amazon: `XAI_API_KEY=... python test_local.py "sua pergunta"`.
-
-## Como falar com ela
-A Amazon exige uma "palavra de entrada" antes da pergunta livre. Por isso, comece com **pergunta**, **me diz**, **me explica**, **o que é**, **quem é**, **como**, **por que**... Exemplo: *"me explica como funciona energia solar"*. Para incluir outras palavras de entrada, adicione-as nos `samples` do `pt-BR.json`.
-
-Atalho de uma frase só: *"Alexa, pergunte ao meu grok quem foi Chico Science"*.
+Atalho: *"Alexa, pergunte ao meu grok quem foi Chico Science"*.
 
 ## Limites
-- **A Alexa nativa continua igual.** O Grok responde só dentro da skill. Não existe como trocar o assistente padrão do Echo, nem com engenharia reversa: o processamento acontece nos servidores da Amazon.
-- **Prazo de cerca de 8 segundos.** Se o Grok demorar mais que isso, a Alexa desiste. Por isso o código usa um modelo rápido e respostas curtas, e corta a chamada em 6 segundos.
-- **Plano gratuito da Vercel:** as funções têm limite de tempo de execução, o que não atrapalha aqui, porque o próprio limite da Alexa é menor.
-- **Custo:** cada pergunta é uma chamada paga à API da xAI. Acompanhe o uso no console.
+
+- A Alexa nativa continua igual. A IA só responde dentro da skill.
+- O plano gratuito do Groq tem limite de requisições por minuto e por dia. Para uso pessoal, sobra.
+- Em planos gratuitos, os provedores podem usar o que você manda. Não fale dados sensíveis.
 
 ## Segurança
-- O endpoint verifica a assinatura da Amazon em toda requisição (certificado, cadeia, assinatura SHA-256 e timestamp de no máximo 150 segundos). Sem essa verificação, qualquer pessoa poderia chamar o endpoint e gastar seus créditos do Grok. A Amazon também exige essa verificação para publicar a skill.
-- `ALEXA_SKIP_VERIFY=1` desliga a verificação. Use só no `test_local.py` e **nunca** configure essa variável na Vercel.
-- Defina `ALEXA_SKILL_ID` para aceitar apenas a sua skill.
 
-## Próximos passos
-- Trocar o Grok por outra IA: só a função `ask_grok` muda. A API da xAI segue o formato da OpenAI, então a troca é fácil.
-- Ferramentas: a API da xAI aceita servidores MCP remotos. Com eles, o Grok pode consultar suas próprias APIs (casa, agenda etc.) antes de responder.
+- Toda requisição tem a assinatura da Amazon verificada: certificado, cadeia, SHA-256 e timestamp de até 150 segundos.
+- `ALEXA_SKIP_VERIFY=1` é só para o `test_local.py`. **Nunca** configure essa variável na Vercel.
+- Os logs ficam em Vercel → projeto → Logs e mostram o motivo de cada recusa ou erro da IA.

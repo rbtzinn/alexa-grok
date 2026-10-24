@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Alexa Skill -> Grok (xAI) | Serverless function Python para a Vercel.
+Alexa Skill -> IA (Groq gratuito por padrao; qualquer API compativel com OpenAI)
+Serverless function Python para a Vercel.
 
 Fluxo: voce fala com o Echo -> a Amazon transcreve e faz POST de um JSON
-para este endpoint -> chamamos o Grok -> devolvemos o texto no formato da
+para este endpoint -> chamamos a IA -> devolvemos o texto no formato da
 Alexa -> o Echo fala a resposta.
 
 Depois do deploy, o endpoint e: https://SEU-PROJETO.vercel.app/api/alexa
@@ -22,9 +23,14 @@ from urllib.request import Request, urlopen
 # ------------------------------------------------------------------
 # Configuracao (variaveis de ambiente na Vercel)
 # ------------------------------------------------------------------
-XAI_API_KEY = os.environ.get("XAI_API_KEY", "")
-XAI_MODEL = os.environ.get("XAI_MODEL", "grok-4-fast")  # troque sem mexer no codigo
-XAI_URL = "https://api.x.ai/v1/chat/completions"
+# Qualquer provedor com API no formato da OpenAI funciona. Padrao: Groq (gratuito, sem cartao).
+#   Groq:       AI_BASE_URL=https://api.groq.com/openai/v1   AI_MODEL=llama-3.3-70b-versatile
+#   OpenRouter: AI_BASE_URL=https://openrouter.ai/api/v1      AI_MODEL=openrouter/free
+#   xAI/Grok:   AI_BASE_URL=https://api.x.ai/v1               AI_MODEL=grok-4-fast (pago)
+AI_API_KEY = os.environ.get("AI_API_KEY", "")
+AI_BASE_URL = os.environ.get("AI_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")
+AI_MODEL = os.environ.get("AI_MODEL", "llama-3.3-70b-versatile")
+AI_URL = f"{AI_BASE_URL}/chat/completions"
 
 # ID da sua skill (amzn1.ask.skill....). Se definido, recusamos chamadas de outras skills.
 ALEXA_SKILL_ID = os.environ.get("ALEXA_SKILL_ID", "")
@@ -36,14 +42,14 @@ SKIP_VERIFY = os.environ.get("ALEXA_SKIP_VERIFY", "") == "1"
 MAX_HISTORY = 6
 
 SYSTEM_PROMPT = os.environ.get(
-    "GROK_SYSTEM_PROMPT",
+    "AI_SYSTEM_PROMPT",
     "Você é um assistente de voz em português do Brasil, falando por uma Alexa. "
     "Responda de forma curta, clara e natural para ser ouvida, em no máximo 3 frases. "
     "Nunca use listas, markdown, emojis ou links.",
 )
 
 # A Alexa espera resposta em ~8s; deixamos margem.
-GROK_TIMEOUT_S = 6
+AI_TIMEOUT_S = 6
 
 
 # ------------------------------------------------------------------
@@ -131,34 +137,34 @@ def verify_amazon_request(headers, raw_body: bytes, body: dict) -> str | None:
 
 
 # ------------------------------------------------------------------
-# Grok
+# IA
 # ------------------------------------------------------------------
-def ask_grok(user_text: str, history: list) -> str:
-    if not XAI_API_KEY:
-        return "A chave da API do Grok não está configurada no servidor."
+def ask_ai(user_text: str, history: list) -> str:
+    if not AI_API_KEY:
+        return "A chave da API da IA não está configurada no servidor."
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages += history[-MAX_HISTORY * 2 :]
     messages.append({"role": "user", "content": user_text})
 
-    payload = {"model": XAI_MODEL, "messages": messages, "temperature": 0.7, "max_tokens": 250}
+    payload = {"model": AI_MODEL, "messages": messages, "temperature": 0.7, "max_tokens": 250}
     req = Request(
-        XAI_URL,
+        AI_URL,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"},
+        headers={"Authorization": f"Bearer {AI_API_KEY}", "Content-Type": "application/json", "User-Agent": "alexa-ia-skill/1.0"},
         method="POST",
     )
     try:
-        with urlopen(req, timeout=GROK_TIMEOUT_S) as resp:
+        with urlopen(req, timeout=AI_TIMEOUT_S) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             return data["choices"][0]["message"]["content"].strip()
     except HTTPError as e:
-        print(f"[grok] HTTP {e.code}: {e.read()[:300]!r}")
-        return "O Grok respondeu com erro. Tenta de novo daqui a pouco."
+        print(f"[ia] HTTP {e.code}: {e.read()[:300]!r}")
+        return "A IA respondeu com erro. Tenta de novo daqui a pouco."
     except (URLError, TimeoutError):
-        return "O Grok demorou demais pra responder. Pode repetir?"
+        return "A IA demorou demais pra responder. Pode repetir?"
     except (KeyError, IndexError, json.JSONDecodeError):
-        return "Recebi uma resposta estranha do Grok."
+        return "Recebi uma resposta estranha da IA."
 
 
 # ------------------------------------------------------------------
@@ -186,7 +192,7 @@ def handle_alexa_request(body: dict) -> dict:
 
     if req_type == "LaunchRequest":
         return speak(
-            "Oi! Agora quem responde é o Grok. Pode perguntar.",
+            "Oi! Pode perguntar o que quiser.",
             reprompt="Pode me perguntar qualquer coisa.",
         )
 
@@ -214,7 +220,7 @@ def handle_alexa_request(body: dict) -> dict:
         if not user_text:
             return speak("Não entendi. Pode repetir?", session_attrs=attrs, reprompt="Pode repetir?")
 
-        answer = ask_grok(user_text, history)
+        answer = ask_ai(user_text, history)
         history = (history + [
             {"role": "user", "content": user_text},
             {"role": "assistant", "content": answer},
@@ -261,4 +267,4 @@ class handler(BaseHTTPRequestHandler):
         self._send(200, handle_alexa_request(body))
 
     def do_GET(self):
-        self._send(200, {"status": "ok", "modelo": XAI_MODEL, "dica": "a Alexa usa POST aqui"})
+        self._send(200, {"status": "ok", "modelo": AI_MODEL, "chave_configurada": bool(AI_API_KEY), "dica": "a Alexa usa POST aqui"})
