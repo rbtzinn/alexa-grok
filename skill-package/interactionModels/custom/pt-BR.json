@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "meu grok",
+      "invocationName": "assistente esperto",
       "intents": [
         {
           "name": "ChatIntent",
