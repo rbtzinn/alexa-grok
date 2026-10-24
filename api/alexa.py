@@ -30,6 +30,15 @@ from urllib.request import Request, urlopen
 AI_API_KEY = os.environ.get("AI_API_KEY", "")
 AI_BASE_URL = os.environ.get("AI_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")
 AI_MODEL = os.environ.get("AI_MODEL", "llama-3.3-70b-versatile")
+# Modelos tentados, em ordem, se o principal for recusado (ex.: descontinuado).
+AI_FALLBACK_MODELS = [
+    m.strip()
+    for m in os.environ.get(
+        "AI_FALLBACK_MODELS",
+        "openai/gpt-oss-20b,llama-3.1-8b-instant,moonshotai/kimi-k2-instruct,openai/gpt-oss-120b",
+    ).split(",")
+    if m.strip()
+]
 AI_URL = f"{AI_BASE_URL}/chat/completions"
 
 # ID da sua skill (amzn1.ask.skill....). Se definido, recusamos chamadas de outras skills.
@@ -49,7 +58,7 @@ SYSTEM_PROMPT = os.environ.get(
 )
 
 # A Alexa espera resposta em ~8s; deixamos margem.
-AI_TIMEOUT_S = 6
+AI_TIMEOUT_S = 6.5
 
 
 # ------------------------------------------------------------------
@@ -139,7 +148,28 @@ def verify_amazon_request(headers, raw_body: bytes, body: dict) -> str | None:
 # ------------------------------------------------------------------
 # IA
 # ------------------------------------------------------------------
+_working_model: str | None = None  # lembrado entre chamadas enquanto a funcao estiver "quente"
+
+
+def _call_model(model: str, messages: list, timeout: float) -> str:
+    payload = {"model": model, "messages": messages, "temperature": 0.7, "max_tokens": 300}
+    req = Request(
+        AI_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {AI_API_KEY}",
+            "Content-Type": "application/json",
+            "User-Agent": "alexa-ia-skill/1.0",
+        },
+        method="POST",
+    )
+    with urlopen(req, timeout=timeout) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    return (data["choices"][0]["message"].get("content") or "").strip()
+
+
 def ask_ai(user_text: str, history: list) -> str:
+    global _working_model
     if not AI_API_KEY:
         return "A chave da API da IA não está configurada no servidor."
 
@@ -147,24 +177,46 @@ def ask_ai(user_text: str, history: list) -> str:
     messages += history[-MAX_HISTORY * 2 :]
     messages.append({"role": "user", "content": user_text})
 
-    payload = {"model": AI_MODEL, "messages": messages, "temperature": 0.7, "max_tokens": 250}
-    req = Request(
-        AI_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Authorization": f"Bearer {AI_API_KEY}", "Content-Type": "application/json", "User-Agent": "alexa-ia-skill/1.0"},
-        method="POST",
-    )
-    try:
-        with urlopen(req, timeout=AI_TIMEOUT_S) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return data["choices"][0]["message"]["content"].strip()
-    except HTTPError as e:
-        print(f"[ia] HTTP {e.code}: {e.read()[:300]!r}")
-        return "A IA respondeu com erro. Tenta de novo daqui a pouco."
-    except (URLError, TimeoutError):
-        return "A IA demorou demais pra responder. Pode repetir?"
-    except (KeyError, IndexError, json.JSONDecodeError):
-        return "Recebi uma resposta estranha da IA."
+    candidates = [_working_model] if _working_model else []
+    candidates += [m for m in [AI_MODEL, *AI_FALLBACK_MODELS] if m not in candidates]
+
+    deadline = time.monotonic() + AI_TIMEOUT_S
+    last_code = None
+    for model in candidates:
+        remaining = deadline - time.monotonic()
+        if remaining < 1:
+            break
+        try:
+            answer = _call_model(model, messages, remaining)
+            if not answer:
+                continue
+            if model != _working_model:
+                print(f"[ia] usando modelo {model}")
+            _working_model = model
+            return answer
+        except HTTPError as e:
+            last_code = e.code
+            body = e.read()[:400]
+            print(f"[ia] modelo {model} -> HTTP {e.code}: {body!r}")
+            if e.code in (400, 404):  # modelo invalido/descontinuado: tenta o proximo
+                continue
+            break
+        except (URLError, TimeoutError):
+            return "A IA demorou demais pra responder. Pode repetir?"
+        except (KeyError, IndexError, json.JSONDecodeError):
+            return "Recebi uma resposta estranha da IA."
+
+    if last_code == 401:
+        return "A chave da IA foi recusada. Confira a variável AI API KEY na Vercel."
+    if last_code == 403:
+        return "O provedor da IA bloqueou o acesso, erro 403."
+    if last_code == 429:
+        return "Atingi o limite gratuito da IA. Tenta de novo daqui a pouco."
+    if last_code in (400, 404):
+        return "Nenhum modelo da IA aceitou o pedido. Confira a variável AI MODEL."
+    if last_code:
+        return f"A IA respondeu com erro {last_code}. Tenta de novo daqui a pouco."
+    return "A IA não respondeu a tempo. Pode repetir?"
 
 
 # ------------------------------------------------------------------
