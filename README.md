@@ -52,6 +52,15 @@ Atalho: *"Alexa, pergunte ao sabe tudo quem foi Chico Science"*.
 
 Em assuntos de saúde, a IA foi instruída a dar só orientação geral, sem indicar dose de remédio, e a mandar procurar atendimento ou ligar para o 192 quando houver sinal de gravidade.
 
+## Pesquisa na web
+
+Quando a frase pede informação atual (*"pesquisa..."*, *"na web"*, *"hoje"*, *"preço"*, *"quanto custa"*, *"notícia"*, *"quem ganhou"*, *"passagem"*...), a skill usa o `openai/gpt-oss-20b` com a ferramenta `browser_search` do Groq. As outras perguntas continuam no modelo rápido.
+
+- Se a busca falhar ou passar de 5 segundos, a skill responde com o que a IA já sabe e avisa: *"Não consegui pesquisar na web agora. Pelo que eu sei: ..."*.
+- Preços vêm aproximados, tirados de sites e notícias. Para comprar, confira no site.
+- Variáveis: `AI_SEARCH=0` desliga a busca. `AI_SEARCH_MODEL` e `AI_SEARCH_TIMEOUT_S` ajustam o modelo e o tempo.
+- Os logs da Vercel mostram `[busca] ok em X s` ou o motivo da falha.
+
 ## Limites
 
 - A Alexa nativa continua igual. A IA só responde dentro da skill.

@@ -11,10 +11,12 @@ Depois do deploy, o endpoint e: https://SEU-PROJETO.vercel.app/api/alexa
 """
 
 import base64
+import re
+import unicodedata
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -40,6 +42,11 @@ AI_FALLBACK_MODELS = [
     if m.strip()
 ]
 AI_URL = f"{AI_BASE_URL}/chat/completions"
+
+# Pesquisa na web (ferramenta browser_search do Groq; só roda quando a frase pede).
+AI_SEARCH_ENABLED = os.environ.get("AI_SEARCH", "1" if "groq.com" in AI_BASE_URL else "0") == "1"
+AI_SEARCH_MODEL = os.environ.get("AI_SEARCH_MODEL", "openai/gpt-oss-20b")
+AI_SEARCH_TIMEOUT_S = float(os.environ.get("AI_SEARCH_TIMEOUT_S", "5"))
 
 # ID da sua skill (amzn1.ask.skill....). Se definido, recusamos chamadas de outras skills.
 ALEXA_SKILL_ID = os.environ.get("ALEXA_SKILL_ID", "")
@@ -154,8 +161,10 @@ def verify_amazon_request(headers, raw_body: bytes, body: dict) -> str | None:
 _working_model: str | None = None  # lembrado entre chamadas enquanto a funcao estiver "quente"
 
 
-def _call_model(model: str, messages: list, timeout: float) -> str:
+def _call_model(model: str, messages: list, timeout: float, extra: dict | None = None) -> str:
     payload = {"model": model, "messages": messages, "temperature": 0.7, "max_tokens": 300}
+    if extra:
+        payload.update(extra)
     req = Request(
         AI_URL,
         data=json.dumps(payload).encode("utf-8"),
@@ -171,19 +180,25 @@ def _call_model(model: str, messages: list, timeout: float) -> str:
     return (data["choices"][0]["message"].get("content") or "").strip()
 
 
-def ask_ai(user_text: str, history: list) -> str:
+def _today() -> str:
+    # Horario de Brasilia (UTC-3, sem horario de verao)
+    d = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-3)))
+    return d.strftime("%d/%m/%Y")
+
+
+def ask_ai(user_text: str, history: list, deadline: float | None = None) -> str:
     global _working_model
     if not AI_API_KEY:
         return "A chave da API da IA não está configurada no servidor."
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": f"{SYSTEM_PROMPT} Hoje é {_today()}."}]
     messages += history[-MAX_HISTORY * 2 :]
     messages.append({"role": "user", "content": user_text})
 
     candidates = [_working_model] if _working_model else []
     candidates += [m for m in [AI_MODEL, *AI_FALLBACK_MODELS] if m not in candidates]
 
-    deadline = time.monotonic() + AI_TIMEOUT_S
+    deadline = deadline or (time.monotonic() + AI_TIMEOUT_S)
     last_code = None
     for model in candidates:
         remaining = deadline - time.monotonic()
@@ -196,7 +211,7 @@ def ask_ai(user_text: str, history: list) -> str:
             if model != _working_model:
                 print(f"[ia] usando modelo {model}")
             _working_model = model
-            return answer
+            return clean_for_speech(answer)
         except HTTPError as e:
             last_code = e.code
             body = e.read()[:400]
@@ -220,6 +235,82 @@ def ask_ai(user_text: str, history: list) -> str:
     if last_code:
         return f"A IA respondeu com erro {last_code}. Tenta de novo daqui a pouco."
     return "A IA não respondeu a tempo. Pode repetir?"
+
+
+def _norm(text: str) -> str:
+    t = unicodedata.normalize("NFD", text.lower())
+    return "".join(c for c in t if unicodedata.category(c) != "Mn")
+
+
+_SEARCH_TRIGGERS = (
+    "pesquisa", "pesquise", "procura", "procure", "busca ", "busque", "na web", "na internet", "no google",
+    "hoje", "agora", "atualmente", "neste momento", "essa semana", "esta semana", "ontem",
+    "preco", "quanto custa", "quanto ta", "quanto esta", "valor atual", "cotacao", "dolar", "euro",
+    "noticia", "aconteceu", "placar", "resultado do jogo", "quem ganhou", "previsao do tempo",
+    "passagem", "voo ", "voos", "promocao",
+)
+
+
+def needs_search(text: str) -> bool:
+    t = f" {_norm(text)} "
+    return any(trigger in t for trigger in _SEARCH_TRIGGERS)
+
+
+def clean_for_speech(text: str) -> str:
+    """Tira citacoes, links e markdown que a Alexa leria em voz alta."""
+    t = re.sub(r"【[^】]*】", "", text)
+    t = re.sub(r"\[(\d+|[^\]]*†[^\]]*)\]", "", t)
+    t = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", t)
+    t = re.sub(r"https?://\S+", "", t)
+    t = re.sub(r"[*_#`>|]", "", t)
+    t = re.sub(r"\s+", " ", t)
+    t = re.sub(r"\s+([.,!?;:])", r"\1", t)
+    return t.strip()
+
+
+def ask_with_search(user_text: str, history: list) -> str:
+    """Pergunta usando a busca na web; se falhar ou demorar, cai para a resposta normal."""
+    start = time.monotonic()
+    deadline = start + AI_TIMEOUT_S
+    if AI_API_KEY:
+        messages = [{
+            "role": "system",
+            "content": (
+                f"{SYSTEM_PROMPT} Hoje é {_today()}. Pesquise na web antes de responder. "
+                "Se for preço, diga valores aproximados em reais e de onde veio a informação, "
+                "e avise que pode mudar. Responda em no máximo 3 frases curtas."
+            ),
+        }]
+        messages += history[-MAX_HISTORY * 2 :]
+        messages.append({"role": "user", "content": user_text})
+        try:
+            answer = _call_model(
+                AI_SEARCH_MODEL,
+                messages,
+                min(AI_SEARCH_TIMEOUT_S, AI_TIMEOUT_S - 1),
+                extra={
+                    "tools": [{"type": "browser_search"}],
+                    "tool_choice": "required",
+                    "reasoning_effort": "low",
+                    "temperature": 0.3,
+                    "max_tokens": 1500,
+                },
+            )
+            answer = clean_for_speech(answer)
+            if answer:
+                print(f"[busca] ok em {time.monotonic() - start:.1f}s")
+                return answer
+        except HTTPError as e:
+            print(f"[busca] HTTP {e.code}: {e.read()[:400]!r}")
+        except (URLError, TimeoutError):
+            print(f"[busca] estourou o tempo ({time.monotonic() - start:.1f}s)")
+        except (KeyError, IndexError, json.JSONDecodeError) as e:
+            print(f"[busca] resposta inesperada: {e!r}")
+
+    if deadline - time.monotonic() < 1:
+        return "A pesquisa na web demorou demais. Tenta perguntar de novo."
+    fallback = ask_ai(user_text, history, deadline=deadline)
+    return f"Não consegui pesquisar na web agora. Pelo que eu sei: {fallback}"
 
 
 # ------------------------------------------------------------------
@@ -303,7 +394,7 @@ def handle_alexa_request(body: dict) -> dict:
         if not user_text:
             return speak("Não entendi. Pode repetir?", session_attrs=attrs, reprompt="Pode repetir?")
 
-        answer = ask_ai(user_text, history)
+        answer = ask_with_search(user_text, history) if AI_SEARCH_ENABLED and needs_search(user_text) else ask_ai(user_text, history)
         history = (history + [
             {"role": "user", "content": user_text},
             {"role": "assistant", "content": answer},
@@ -350,4 +441,4 @@ class handler(BaseHTTPRequestHandler):
         self._send(200, handle_alexa_request(body))
 
     def do_GET(self):
-        self._send(200, {"status": "ok", "modelo": AI_MODEL, "chave_configurada": bool(AI_API_KEY), "dica": "a Alexa usa POST aqui"})
+        self._send(200, {"status": "ok", "modelo": AI_MODEL, "chave_configurada": bool(AI_API_KEY), "busca_web": AI_SEARCH_ENABLED, "dica": "a Alexa usa POST aqui"})
