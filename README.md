@@ -46,9 +46,11 @@ Depois de mudar qualquer variável, faça **Redeploy**.
 
 ## Como falar
 
-Comece a pergunta com **pergunta**, **me diz**, **me explica**, **o que é**, **quem é**, **como**, **por que**... Essa "palavra de entrada" é exigida pela Amazon para perguntas livres.
+Depois de abrir a skill, fale do jeito que quiser. O `CatchAllIntent` usa um slot customizado (`CATCH_ALL`) e manda a frase inteira para a IA. Se alguma frase não for entendida, comece com **me diz**, **me explica**, **pergunta**, **qual** ou **como**. Essas frases caem no `ChatIntent`, que é mais garantido.
 
 Atalho: *"Alexa, pergunte ao sabe tudo quem foi Chico Science"*.
+
+Em assuntos de saúde, a IA foi instruída a dar só orientação geral, sem indicar dose de remédio, e a mandar procurar atendimento ou ligar para o 192 quando houver sinal de gravidade.
 
 ## Limites
 

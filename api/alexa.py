@@ -54,7 +54,10 @@ SYSTEM_PROMPT = os.environ.get(
     "AI_SYSTEM_PROMPT",
     "Você é um assistente de voz em português do Brasil, falando por uma Alexa. "
     "Responda de forma curta, clara e natural para ser ouvida, em no máximo 3 frases. "
-    "Nunca use listas, markdown, emojis ou links.",
+    "Nunca use listas, markdown, emojis ou links. "
+    "Em assuntos de saúde, remédios ou emergências, dê orientação geral, diga que não substitui um médico "
+    "e, se houver qualquer sinal de gravidade, oriente a procurar atendimento ou ligar para o SAMU no 192. "
+    "Nunca indique dose de remédio; mande seguir a bula ou o médico.",
 )
 
 # A Alexa espera resposta em ~8s; deixamos margem.
@@ -256,19 +259,26 @@ def handle_alexa_request(body: dict) -> dict:
             return speak("Até mais!", end=True)
         if name == "AMAZON.HelpIntent":
             return speak(
-                "Comece com pergunta, me diz ou me explica, e depois fale o que quiser.",
+                "É só falar o que você quer saber. Se eu não entender, comece com me diz ou me explica.",
                 session_attrs=attrs,
                 reprompt="O que você quer saber?",
             )
         if name == "AMAZON.FallbackIntent":
             return speak(
-                "Não peguei. Tenta começar com pergunta ou me diz.",
+                "Não peguei. Tenta de novo começando com me diz ou me explica.",
                 session_attrs=attrs,
                 reprompt="O que você quer saber?",
             )
 
         slots = intent.get("slots", {}) or {}
-        user_text = (slots.get("query") or {}).get("value", "")
+        # "query" vem do ChatIntent (frases com palavra de entrada);
+        # "text" vem do CatchAllIntent (qualquer frase).
+        user_text = ""
+        for slot_name in ("query", "text"):
+            value = (slots.get(slot_name) or {}).get("value")
+            if value:
+                user_text = value
+                break
         if not user_text:
             return speak("Não entendi. Pode repetir?", session_attrs=attrs, reprompt="Pode repetir?")
 

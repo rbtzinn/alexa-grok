@@ -6,7 +6,10 @@
         {
           "name": "ChatIntent",
           "slots": [
-            { "name": "query", "type": "AMAZON.SearchQuery" }
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
           ],
           "samples": [
             "pergunta {query}",
@@ -29,13 +32,226 @@
             "quando {query}"
           ]
         },
-        { "name": "AMAZON.HelpIntent", "samples": [] },
-        { "name": "AMAZON.StopIntent", "samples": [] },
-        { "name": "AMAZON.CancelIntent", "samples": [] },
-        { "name": "AMAZON.NavigateHomeIntent", "samples": [] },
-        { "name": "AMAZON.FallbackIntent", "samples": [] }
+        {
+          "name": "CatchAllIntent",
+          "slots": [
+            {
+              "name": "text",
+              "type": "CATCH_ALL"
+            }
+          ],
+          "samples": [
+            "{text}"
+          ]
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        }
       ],
-      "types": []
+      "types": [
+        {
+          "name": "CATCH_ALL",
+          "values": [
+            {
+              "name": {
+                "value": "oi"
+              }
+            },
+            {
+              "name": {
+                "value": "tudo bem"
+              }
+            },
+            {
+              "name": {
+                "value": "obrigado"
+              }
+            },
+            {
+              "name": {
+                "value": "sim"
+              }
+            },
+            {
+              "name": {
+                "value": "não"
+              }
+            },
+            {
+              "name": {
+                "value": "talvez"
+              }
+            },
+            {
+              "name": {
+                "value": "conta mais"
+              }
+            },
+            {
+              "name": {
+                "value": "explica melhor"
+              }
+            },
+            {
+              "name": {
+                "value": "meu filho está com febre"
+              }
+            },
+            {
+              "name": {
+                "value": "estou com dor de cabeça"
+              }
+            },
+            {
+              "name": {
+                "value": "o que eu faço"
+              }
+            },
+            {
+              "name": {
+                "value": "devo levar ele na emergência"
+              }
+            },
+            {
+              "name": {
+                "value": "quanto tempo leva"
+              }
+            },
+            {
+              "name": {
+                "value": "vale a pena"
+              }
+            },
+            {
+              "name": {
+                "value": "me ajuda a decidir uma coisa"
+              }
+            },
+            {
+              "name": {
+                "value": "estou pensando em mudar de emprego"
+              }
+            },
+            {
+              "name": {
+                "value": "o que você acha disso"
+              }
+            },
+            {
+              "name": {
+                "value": "tenho frango arroz e tomate o que posso cozinhar"
+              }
+            },
+            {
+              "name": {
+                "value": "escreve um poema sobre o mar"
+              }
+            },
+            {
+              "name": {
+                "value": "faz uma piada"
+              }
+            },
+            {
+              "name": {
+                "value": "inventa uma história pra criança dormir"
+              }
+            },
+            {
+              "name": {
+                "value": "traduz bom dia para o inglês"
+              }
+            },
+            {
+              "name": {
+                "value": "quantos quilômetros tem de recife a olinda"
+              }
+            },
+            {
+              "name": {
+                "value": "a capital de pernambuco"
+              }
+            },
+            {
+              "name": {
+                "value": "um resumo da segunda guerra mundial"
+              }
+            },
+            {
+              "name": {
+                "value": "como eu faço um bolo de chocolate sem forno"
+              }
+            },
+            {
+              "name": {
+                "value": "eu queria saber se é melhor comprar ou alugar um apartamento hoje em dia"
+              }
+            },
+            {
+              "name": {
+                "value": "explica pra mim de um jeito simples como funciona a inteligência artificial e por que ela erra às vezes"
+              }
+            },
+            {
+              "name": {
+                "value": "preciso de uma ideia de presente para minha esposa que gosta de ler e de café"
+              }
+            },
+            {
+              "name": {
+                "value": "meu bebê de um ano não quer comer legumes o que posso tentar"
+              }
+            },
+            {
+              "name": {
+                "value": "qual a diferença entre react e next"
+              }
+            },
+            {
+              "name": {
+                "value": "e isso é verdade"
+              }
+            },
+            {
+              "name": {
+                "value": "e por quê"
+              }
+            },
+            {
+              "name": {
+                "value": "e depois"
+              }
+            },
+            {
+              "name": {
+                "value": "fala de novo"
+              }
+            },
+            {
+              "name": {
+                "value": "resume em uma frase"
+              }
+            }
+          ]
+        }
+      ]
     }
   }
 }
